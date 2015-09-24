@@ -12,16 +12,17 @@ require 'fileutils'
 # test inputs
 # input T1 = ordered fasta file
 # input T2 = ordered vcf file
-### Read sequence fasta file and store sequences in a hash
 
-sequences = Hash.new {|h,k| h[k] = {} }
+### Read sequence fasta file and store sequences in a hash
+sequences = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) }
 file = Bio::FastaFormat.open(ARGV[0])
 file.each do |seq|
 	sequences[seq.entry_id][:seq] = seq.entry
 	sequences[seq.entry_id][:len] = seq.length
 end
 
-in_vars = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) } # a hash of variants from background vcf file
+### read vcf file and make a hash of variants from vcf file
+in_vars = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) }
 File.open(ARGV[1], 'r').each do |line|
    next if line =~ /^#/
    v = Bio::DB::Vcf.new(line)
@@ -35,7 +36,9 @@ File.open(ARGV[1], 'r').each do |line|
    end
 end
 
-adj = 1 # ratio adjustments
+snpratio = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) }
+### process sequence fragments based on variant density
+adj = 0.1 # ratio adjustments
 ratios = []
 sequences.keys.each { | id |
 	if in_vars[id.to_s].has_key?(:het)
@@ -48,20 +51,44 @@ sequences.keys.each { | id |
 	else
 		sequences[id][:hom] = adj
 	end
-	ratio = (sequences[id][:hom].to_f/sequences[id][:het].to_f)/(sequences[id][:len].to_f/1000000.0) ## normalized ratio per megabase (MB)
+	ratio = (sequences[id][:hom].to_f/sequences[id][:het].to_f) / \
+			(sequences[id][:len].to_f/1000000.0) ## normalized ratio per megabase (MB)
 	sequences[id][:ratio] = ratio
+	snpratio[ratio][id] = 1
 	ratios << ratio
 }
 
+### use maximum ratio value and assingn cutoffs based on it
 maximum = ratios.max
-cutoff = 0.5 # 0.5, 0.2, 0.1, 0.05 times the maximum
+cutoff = 0.1 # 0.5, 0.2, 0.1, 0.05 times the maximum
 minimum = maximum * cutoff
 
+### select fragments based on cut offs and store ids to an array
 selected = []
 sequences.keys.each { | id |
 	if sequences[id][:ratio] >= minimum
 		selected << id
 	end
 }
+warn "#{selected}\n"
 
+#permutations = selected.permutation(selected.length).to_a
+#warn "#{permutations}\n"
+
+new_order = []
+n = 1
+snpratio.keys.sort.reverse.each { |fraction|
+  if fraction >= minimum
+	snpratio[fraction].keys.each do |id|
+		if n%2 == 0
+			new_order.unshift(id)
+		else
+			new_order.push(id)
+		end
+		n += 1
+	end
+  end
+}
+
+warn "#{new_order}\n"
 

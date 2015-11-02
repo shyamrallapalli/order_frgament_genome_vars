@@ -60,7 +60,7 @@ sequences.keys.each { | id |
 
 ### use maximum ratio value and assingn cutoffs based on it
 maximum = ratios.max
-cutoff = 0.1 # 0.5, 0.2, 0.1, 0.05 times the maximum
+cutoff = 0.5 # 0.5, 0.2, 0.1, 0.05 times the maximum
 minimum = maximum * cutoff
 
 ### select fragments based on cut offs and store ids to an array
@@ -70,7 +70,7 @@ sequences.keys.each { | id |
 		selected << id
 	end
 }
-warn "#{selected}\n"
+#warn "#{selected}\n"
 
 #permutations = selected.permutation(selected.length).to_a
 #warn "#{permutations}\n"
@@ -79,7 +79,8 @@ new_order = []
 n = 1
 snpratio.keys.sort.reverse.each { |fraction|
   if fraction >= minimum
-	snpratio[fraction].keys.each do |id|
+  	randomized = snpratio[fraction].keys.shuffle
+	randomized.each do |id|
 		if n%2 == 0
 			new_order.unshift(id)
 		else

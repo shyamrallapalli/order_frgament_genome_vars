@@ -13,6 +13,11 @@ require 'fileutils'
 # input T1 = ordered fasta file
 # input T2 = ordered vcf file
 
+# filter parameter are to be read from a file in the current folder
+pars = YAML.load_file("./filter_pars.yml")
+adj = pars['ratio_adj']  # 1 or 0.1 or 0.01 etc will be added to numertator and denominator
+filter = pars['filter']   # cut off filter calculated as percent of maximum ratio
+
 ### Read sequence fasta file and store sequences in a hash
 sequences = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) }
 file = Bio::FastaFormat.open(ARGV[0])
@@ -38,7 +43,6 @@ end
 
 snpratio = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) }
 ### process sequence fragments based on variant density
-adj = 0.1 # ratio adjustments
 ratios = []
 sequences.keys.each { | id |
 	if in_vars[id.to_s].has_key?(:het)
@@ -51,8 +55,11 @@ sequences.keys.each { | id |
 	else
 		sequences[id][:hom] = adj
 	end
-	ratio = (sequences[id][:hom].to_f/sequences[id][:het].to_f) / \
+	ratio = 0
+	unless sequences[id][:hom] == adj and sequences[id][:het] == adj
+		ratio = (sequences[id][:hom].to_f/sequences[id][:het].to_f) / \
 			(sequences[id][:len].to_f/1000000.0) ## normalized ratio per megabase (MB)
+	end
 	sequences[id][:ratio] = ratio
 	snpratio[ratio][id] = 1
 	ratios << ratio
@@ -60,13 +67,15 @@ sequences.keys.each { | id |
 
 ### use maximum ratio value and assingn cutoffs based on it
 maximum = ratios.max
-cutoff = 0.5 # 0.5, 0.2, 0.1, 0.05 times the maximum
-minimum = maximum * cutoff
+minimum = 0
+unless filter == 0
+	minimum = (maximum * filter) / 100
+end
 
 ### select fragments based on cut offs and store ids to an array
 selected = []
 sequences.keys.each { | id |
-	if sequences[id][:ratio] >= minimum
+	if sequences[id][:ratio] > minimum
 		selected << id
 	end
 }

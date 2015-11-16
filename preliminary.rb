@@ -5,6 +5,7 @@ require 'bio'
 require 'bio-samtools'
 require 'yaml'
 require 'fileutils'
+require "rinruby"
 
 # input 1 = fasta file
 # input 2 = vcf file
@@ -23,7 +24,7 @@ sequences = Hash.new{ |h,k| h[k] = Hash.new(&h.default_proc) }
 file = Bio::FastaFormat.open(ARGV[0])
 file.each do |seq|
 	sequences[seq.entry_id][:seq] = seq.entry
-	sequences[seq.entry_id][:len] = seq.length
+	sequences[seq.entry_id][:len] = seq.length.to_i
 end
 
 ### read vcf file and make a hash of variants from vcf file
@@ -79,11 +80,28 @@ sequences.keys.each { | id |
 		selected << id
 	end
 }
-#warn "#{selected}\n"
 
-#permutations = selected.permutation(selected.length).to_a
-#warn "#{permutations}\n"
+rubyR = RinRuby.new(:echo=>false)
+rubyR.eval "library(MESS)"
+selected.permutation.each do | arranged |
+	lengths = []
+	ratios = []
+	arranged.each do |contigid|
+		lengths << sequences[contigid][:len]
+		ratios << sequences[contigid][:ratio]
+	end
+	rubyR.x = lengths
+	rubyR.y = ratios
+	rubyR.eval "calc = auc(cumsum(x), y)"
+	auc = rubyR.pull "calc"
+	if auc >= 7377940.113 # lowest value from 1000 iterations of hasty data
+		puts "#{auc}\t#{arranged.join('\t')}"
+	end
+end
 
+rubyR.quit
+
+=begin
 new_order = []
 n = 1
 snpratio.keys.sort.reverse.each { |fraction|
@@ -101,4 +119,4 @@ snpratio.keys.sort.reverse.each { |fraction|
 }
 
 warn "#{new_order}\n"
-
+=end

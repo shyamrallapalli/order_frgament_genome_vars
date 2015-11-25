@@ -58,12 +58,13 @@ sequences.keys.each { | id |
 	end
 	ratio = 0
 	unless sequences[id][:hom] == adj and sequences[id][:het] == adj
-		ratio = (sequences[id][:hom].to_f/sequences[id][:het].to_f) / \
-			(sequences[id][:len].to_f/1000000.0) ## normalized ratio per megabase (MB)
+		ratio = sequences[id][:hom].to_f/sequences[id][:het].to_f
 	end
-	sequences[id][:ratio] = ratio
-	snpratio[ratio][id] = 1
-	ratios << ratio
+	if sequences[id][:hom].to_f > sequences[id][:het].to_f
+		sequences[id][:ratio] = ratio
+		snpratio[ratio][id] = 1
+		ratios << ratio
+	end
 }
 
 ### use maximum ratio value and assingn cutoffs based on it
@@ -73,29 +74,30 @@ unless filter == 0
 	minimum = (maximum * filter) / 100
 end
 
+output = File.open("processed_varinfo.txt", "w")
+output.puts "fragment\tnumhm\tnumht\tratio"
 ### select fragments based on cut offs and store ids to an array
 selected = []
 sequences.keys.each { | id |
 	if sequences[id][:ratio] > minimum
+		output.puts "#{id}\t#{sequences[id][:hom]}\t#{sequences[id][:het]}\t#{sequences[id][:ratio]}"
 		selected << id
 	end
 }
+output.close
 
 rubyR = RinRuby.new(:echo=>false)
-rubyR.eval "library(MESS)"
+rubyR.eval "library(zoo)"
+rubyR.eval "source('./peakfind.r')"
+rubyR.eval "inputdf = read.delim(file=\"processed_varinfo.txt\", header = TRUE, stringsAsFactors=FALSE)"
 selected.permutation.each do | arranged |
-	lengths = []
-	ratios = []
-	arranged.each do |contigid|
-		lengths << sequences[contigid][:len]
-		ratios << sequences[contigid][:ratio]
-	end
-	rubyR.x = lengths
-	rubyR.y = ratios
-	rubyR.eval "calc = auc(cumsum(x), y)"
-	auc = rubyR.pull "calc"
-	if auc >= 7377940.113 # lowest value from 1000 iterations of hasty data
-		puts "#{auc}\t#{arranged.join('\t')}"
+	rubyR.arranged = arranged
+	rubyR.eval "newdf = inputdf[match(arranged, indf$fragment,]"
+	rubyR.eval "row.names(newdf) = NULL"
+	rubyR.eval "peaks = argmax(row.names(newdf), newdf$ratio, span=1)"
+	numpeak = rubyR.pull "length(peaks$i)"
+	if numpeak == 1
+		puts "#{auc}\t#{arranged.join("\t")}"
 	end
 end
 
